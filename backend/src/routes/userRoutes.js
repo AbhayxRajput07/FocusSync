@@ -1,0 +1,10 @@
+const express = require('express');
+const router = express.Router();
+const controller = require('../controllers/userController');
+const { verifyJWT } = require('../middleware/authMiddleware');
+router.get('/profile', verifyJWT, controller.getProfile);
+router.put('/settings', verifyJWT, controller.updateSettings);
+router.get('/streak', verifyJWT, controller.getStreak);
+router.put('/fingerprint', verifyJWT, controller.getFingerprint);
+router.put('/debt', verifyJWT, controller.updateDebt);
+module.exports = router;

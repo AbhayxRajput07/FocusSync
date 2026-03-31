@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Session Protocol V2</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    
+    :root {
+      --navy: #0F1F3D;
+      --navy-light: #1E3A8A;
+      --blue: #2563EB;
+      --blue-light: #EFF6FF;
+      --green: #10B981;
+      --orange: #F59E0B;
+      --red: #EF4444;
+      --muted: #64748B;
+      --border: #E2E8F0;
+      --bg-color: #F8FAFC;
+      --transition: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop') center/cover no-repeat;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      color: #0F172A;
+    }
+
+    /* ----- OVERLAY & MODAL CONTAINER ----- */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 15, 30, 0.75);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      opacity: 0;
+      transition: opacity 250ms ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .overlay.active { opacity: 1; }
+
+    .modal {
+      position: relative;
+      width: 100%;
+      max-width: 580px;
+      max-height: 90vh;
+      background: #FFFFFF;
+      border-radius: 24px;
+      box-shadow: 0 24px 64px rgba(15, 31, 61, 0.25);
+      border-left: 4px solid var(--navy);
+      transform: translateY(40px) scale(0.96);
+      opacity: 0;
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .overlay.active .modal {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+
+    /* Subtle Noise Texture */
+    .modal::before {
+      content: '';
+      position: absolute; inset: 0; z-index: 0;
+      background: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="noiseFilter"><feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23noiseFilter)"/></svg>');
+      opacity: 0.015;
+      pointer-events: none;
+    }
+
+    .modal-content-wrapper { position: relative; z-index: 10; display: flex; flex-direction: column; max-height: 100%; }
+
+    
+    .header {
+      padding: 24px 32px 20px;
+      border-bottom: 2px solid transparent; 
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header::after {
+      content: '';
+      position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg, #2563EB44, transparent);
+    }
+    .header-title { font-size: 24px; font-weight: 800; color: var(--navy); display: flex; align-items: center; gap: 12px; }
+    .badge {
+      background: var(--navy); color: #fff; font-size: 10px; font-weight: 700;
+      padding: 4px 8px; border-radius: 50px; letter-spacing: 0.05em; font-family: monospace;
+      box-shadow: 0 4px 12px rgba(15,31,61,0.2);
+    }
+    
+    .close-btn {
+      width: 36px; height: 36px; border-radius: 50%;
+      border: 1.5px solid var(--border); background: transparent;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); cursor: pointer; transition: 200ms ease;
+    }
+    .close-btn:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .close-btn svg { width: 18px; height: 18px; }
+
+    /* ----- STEPPER ----- */
+    .stepper {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      padding: 12px 24px; background: var(--bg-color);
+      border-radius: 50px; margin: 0 32px 12px; align-self: center; width: calc(100% - 64px);
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); border: 1px solid var(--border);
+    }
+    .step-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; z-index: 2; }
+    .step-circle {
+      width: 36px; height: 36px; border-radius: 50%; background: #fff;
+      border: 2px solid var(--border); display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: var(--muted); transition: var(--transition);
+    }
+    .step-label { font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; transition: var(--transition); }
+    
+    .step-item.active .step-circle {
+      background: var(--navy); border-color: var(--navy); color: #fff;
+      box-shadow: 0 0 0 4px rgba(37,99,235,0.2);
+    }
+    .step-item.active .step-label { color: var(--navy); font-weight: 800; }
+    
+    .step-item.complete .step-circle {
+      background: var(--green); border-color: var(--green); color: #fff;
+    }
+    .step-item.complete .step-label { color: var(--green); }
+
+    .step-connector { flex: 1; height: 2px; position: relative; background: linear-gradient(90deg, var(--border) 50%, transparent 50%); background-size: 8px 100%; top: -10px; }
+    .step-connector-fill {
+      position: absolute; inset: 0; background: linear-gradient(90deg, var(--green), var(--blue));
+      width: 0%; transition: width 400ms ease;
+    }
+    .step-connector.fill-100 .step-connector-fill { width: 100%; }
+
+    /* ----- SLIDING VIEWS ----- */
+    .slider-viewport {
+      flex: 1; width: 100%; overflow: hidden; position: relative;
+    }
+    .steps-container {
+      display: flex; width: 300%; height: 100%;
+      transition: transform var(--transition);
+    }
+    .step-panel {
+      width: 33.333%; flex-shrink: 0; padding: 12px 32px 32px;
+      overflow-y: auto; max-height: calc(90vh - 180px);
+    }
+    /* Scrollbar styling */
+    .step-panel::-webkit-scrollbar { width: 4px; }
+    .step-panel::-webkit-scrollbar-track { background: transparent; }
+    .step-panel::-webkit-scrollbar-thumb { background: var(--navy); border-radius: 4px; }
+
+    /* ----- TYPOGRAPHY / STRUCTURE ----- */
+    .section-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+    .accent-bar { width: 4px; height: 28px; background: var(--blue); border-radius: 2px; }
+    .section-title { font-size: 20px; font-weight: 800; color: var(--navy); }
+    .section-subtitle { font-size: 14px; color: var(--muted); margin-top: 4px; }
+
+    /* ----- SLIDER CARDS (STEP 1) ----- */
+    .cards-gap { display: flex; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+    .slider-card {
+      background: #FAFBFF; border: 1px solid #E8EFFE; border-radius: 16px;
+      padding: 20px 24px; position: relative; transition: var(--transition);
+      box-shadow: 0 4px 12px rgba(37,99,235,0.02);
+    }
+    .slider-card:hover { border-color: var(--blue); box-shadow: 0 8px 24px rgba(37,99,235,0.08); transform: translateY(-1px); }
+    .strip { position: absolute; left: 0; top: 16px; bottom: 16px; width: 4px; border-radius: 0 4px 4px 0; }
+    
+    .card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .card-label { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; color: var(--navy); }
+    .card-label svg { width: 18px; height: 18px; }
+    
+    .val-badge {
+      background: var(--navy); color: #fff; font-size: 12px; font-weight: 800;
+      padding: 4px 12px; border-radius: 50px; min-width: 32px; text-align: center;
+      transition: transform 150ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .val-badge.bounce { transform: scale(1.2); }
+
+    /* Custom Input Range */
+    .range-wrap { position: relative; width: 100%; }
+    input[type=range] {
+      -webkit-appearance: none; width: 100%; background: transparent; height: 32px; outline: none; cursor: pointer;
+    }
+    input[type=range]::-webkit-slider-runnable-track {
+      width: 100%; height: 6px; border-radius: 3px;
+      background: linear-gradient(to right, var(--fill) var(--val), var(--border) var(--val));
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; height: 22px; width: 22px; border-radius: 50%;
+      background: #fff; border: 3px solid var(--fill); margin-top: -8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15); transition: transform 100ms ease, box-shadow 100ms ease;
+    }
+    input[type=range]:active::-webkit-slider-thumb, input[type=range]:hover::-webkit-slider-thumb {
+      transform: scale(1.25); box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    }
+    .range-labels { display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: var(--muted); margin-top: -4px; padding: 0 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* ----- VARIANCE BOX ----- */
+    .variance-box {
+      border-radius: 16px; padding: 20px; position: relative; overflow: hidden;
+      border-left: 4px solid var(--green); margin-bottom: 24px;
+      background: linear-gradient(135deg, #F0FDF4, #DCFCE7); transition: var(--transition);
+      transform: translateY(10px); opacity: 0; animation: fadeUp 400ms forwards 200ms;
+    }
+    @keyframes fadeUp { to { transform: translateY(0); opacity: 1; } }
+    .var-top { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 12px; z-index: 2; position: relative; }
+    .var-title { font-size: 13px; font-weight: 700; color: var(--navy); display: flex; align-items: center; gap: 6px; }
+    .var-title svg { width: 16px; height: 16px; }
+    .var-score { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -0.05em; }
+    .var-bar-bg { width: 100%; height: 6px; background: rgba(0,0,0,0.05); border-radius: 3px; overflow: hidden; margin-bottom: 8px; z-index: 2; position: relative; }
+    .var-bar-fill { height: 100%; width: 0%; transition: width 600ms cubic-bezier(0.4, 0, 0.2, 1); }
+    .var-text { font-size: 13px; font-weight: 500; z-index: 2; position: relative; }
+
+    /* dynamic variance states */
+    .v-opt { border-color: var(--green); background: linear-gradient(135deg, #F0FDF4, #DCFCE7); }
+    .v-opt .var-score, .v-opt .var-title { color: var(--green); }
+    .v-opt .var-bar-fill { background: var(--green); }
+    .v-opt .var-text { color: #065F46; }
+
+    .v-mod { border-color: var(--orange); background: linear-gradient(135deg, #FFFBEB, #FEF3C7); }
+    .v-mod .var-score, .v-mod .var-title { color: #D97706; }
+    .v-mod .var-bar-fill { background: var(--orange); }
+    .v-mod .var-text { color: #92400E; }
+
+    .v-low { border-color: var(--red); background: linear-gradient(135deg, #FFF1F2, #FFE4E6); }
+    .v-low .var-score, .v-low .var-title { color: var(--red); }
+    .v-low .var-bar-fill { background: var(--red); }
+    .v-low .var-text { color: #9F1239; }
+
+    /* ----- BUTTONS ----- */
+    .btn-row { display: flex; gap: 12px; margin-top: auto; }
+    .btn-proc, .btn-back {
+      height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+      font-size: 16px; font-weight: 600; cursor: pointer; transition: var(--transition); border: none; outline: none;
+    }
+    .btn-proc {
+      flex: 1; background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+      color: #fff; box-shadow: 0 4px 12px rgba(15,31,61,0.2);
+    }
+    .btn-proc:hover {
+      filter: brightness(1.15); transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(15,31,61,0.35);
+    }
+    .btn-proc:active { transform: scale(0.98); }
+    
+    .btn-back {
+      padding: 0 24px; background: transparent; color: var(--navy); border: 2px solid var(--border);
+    }
+    .btn-back:hover { background: var(--bg-color); border-color: var(--navy); }
+
+    /* ----- STEP 2: ACCOUNTABILITY ----- */
+    .acc-card {
+      border: 1px solid var(--border); border-radius: 16px; background: #fff;
+      padding: 24px; display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 24px; position: relative; overflow: hidden;
+    }
+    .acc-card::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #7C3AED; }
+    .acc-info { display: flex; gap: 16px; }
+    .acc-icon { width: 40px; height: 40px; border-radius: 10px; background: #F3E8FF; color: #7C3AED; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .acc-icon svg { width: 20px; height: 20px; }
+    .acc-text h3 { font-size: 18px; font-weight: 800; color: var(--navy); margin-bottom: 4px; }
+    .acc-text p { font-size: 13px; color: var(--muted); line-height: 1.5; max-width: 280px; }
+
+    /* Custom Toggle */
+    .toggle {
+      width: 52px; height: 28px; background: var(--border); border-radius: 14px;
+      position: relative; cursor: pointer; transition: 300ms ease;
+    }
+    .toggle-thumb {
+      width: 22px; height: 22px; background: #fff; border-radius: 50%;
+      position: absolute; top: 3px; left: 3px; border: 1px solid rgba(0,0,0,0.05);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      transition: transform 300ms cubic-bezier(0.68, -0.55, 0.265, 1.55); /* Spring */
+    }
+    .toggle.active { background: var(--navy); box-shadow: 0 0 12px rgba(37,99,235,0.4); }
+    .toggle.active .toggle-thumb { transform: translateX(24px); border-color: transparent; }
+
+    /* Staggered Chips */
+    .chips-container {
+      max-height: 0; opacity: 0; overflow: hidden; transition: all 400ms ease;
+      display: flex; flex-wrap: wrap; gap: 10px;
+    }
+    .chips-container.active { max-height: 200px; opacity: 1; margin-bottom: 32px; overflow: visible; }
+    .chip {
+      background: var(--navy); color: #fff; font-size: 12px; font-weight: 600;
+      padding: 10px 16px; border-radius: 50px; display: flex; align-items: center; gap: 8px;
+      opacity: 0; transform: translateY(15px); transition: all 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .chips-container.active .chip { opacity: 1; transform: translateY(0); }
+    .chips-container.active .chip:nth-child(1) { transition-delay: 100ms; }
+    .chips-container.active .chip:nth-child(2) { transition-delay: 180ms; }
+    .chips-container.active .chip:nth-child(3) { transition-delay: 260ms; }
+
+    /* ----- STEP 3: CONFIGURATION ----- */
+    .form-group { margin-bottom: 24px; position: relative; }
+    .form-label { display: block; font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--navy); margin-bottom: 8px; letter-spacing: 0.05em; }
+    .input-wrapper { position: relative; }
+    .input-wrapper svg { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--muted); transition: 200ms ease; }
+    .target-input {
+      width: 100%; height: 48px; border: 1.5px solid var(--border); border-radius: 12px;
+      padding: 0 16px 0 44px; font-size: 14px; font-family: 'Inter', sans-serif; font-weight: 500;
+      transition: var(--transition); outline: none; background: #fff;
+    }
+    .target-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+    .target-input:focus + svg { color: var(--blue); }
+
+    .pill-group { display: flex; gap: 8px; }
+    .pill {
+      flex: 1; height: 44px; border-radius: 12px; background: #fff; border: 1.5px solid var(--border);
+      font-size: 14px; font-weight: 700; color: var(--navy); cursor: pointer; transition: var(--transition);
+    }
+    .pill:hover:not(.active) { background: var(--bg-color); border-color: var(--navy); }
+    .pill.active { background: var(--navy); color: #fff; border-color: var(--navy); box-shadow: 0 4px 12px rgba(15,31,61,0.25); transform: scale(1.02); }
+
+    .summary-card {
+      background: linear-gradient(135deg, var(--navy), var(--navy-light)); border-radius: 16px;
+      padding: 20px; color: #fff; margin-bottom: 24px;
+      opacity: 0; transform: translateY(20px); max-height: 0; overflow: hidden;
+      transition: all 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275); margin-top: -24px;
+    }
+    .summary-card.show { opacity: 1; transform: translateY(0); max-height: 200px; margin-top: 0; }
+    .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+    .sum-item { display: flex; flex-direction: column; }
+    .sum-label { font-size: 11px; color: rgba(255,255,255,0.6); text-transform: uppercase; font-weight: 600; margin-bottom: 2px; }
+    .sum-val { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Giant shimmer button */
+    .btn-launch {
+      width: 100%; height: 56px; border-radius: 14px; border: none; cursor: pointer;
+      font-size: 17px; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: center; gap: 8px;
+      background: linear-gradient(135deg, var(--navy) 0%, var(--blue) 50%, #7C3AED 100%);
+      background-size: 200% auto; transition: all 300ms ease; outline: none;
+      box-shadow: 0 8px 24px rgba(37,99,235,0.3);
+    }
+    .btn-launch:hover { background-position: right center; transform: translateY(-2px); box-shadow: 0 12px 32px rgba(37,99,235,0.4); }
+    .btn-launch:active { transform: scale(0.98); }
+    
+    .spinner {
+      width: 20px; height: 20px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%;
+      border-top-color: #fff; animation: spin 1s ease-in-out infinite; display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .btn-launch.loading .text, .btn-launch.loading svg { display: none; }
+    .btn-launch.loading .spinner { display: block; }
+    .btn-launch.success { background: var(--green); pointer-events: none; }
+    .btn-launch.success .spinner { display: none; }
+    .btn-launch.success::after { content: 'ENGAGED'; display: block; }
+    .btn-launch.success .text { display: none; }
+
+  </style>
+</head>
+<body>
+
+  <!-- TRIGGER BUTTON (for demo purposes) -->
+  <button id="openDemoBtn" style="padding: 16px 32px; font-size: 16px; font-weight: 700; font-family: 'Inter'; border-radius: 12px; background: #0F1F3D; color: white; border: none; cursor: pointer; box-shadow: 0 8px 24px rgba(15,31,61,0.2);">Launch Session Protocol Modal</button>
+
+  <div class="overlay" id="modalOverlay">
+    <div class="modal" id="protoModal">
+      
+      <div class="modal-content-wrapper">
+        <!-- HEADER -->
+        <div class="header">
+          <div>
+            <div class="header-title">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#2563EB" stroke-width="2.5" stroke-linecap="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+              Session Protocol
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <span class="badge">PROTOCOL_V2</span>
+            <button class="close-btn" id="closeBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- STEPPER -->
+        <div class="stepper">
+          <div class="step-item active" id="dot-1">
+            <div class="step-circle">1</div>
+            <span class="step-label">Condition</span>
+          </div>
+          <div class="step-connector" id="conn-1"><div class="step-connector-fill"></div></div>
+          
+          <div class="step-item" id="dot-2">
+            <div class="step-circle">2</div>
+            <span class="step-label">Contract</span>
+          </div>
+          <div class="step-connector" id="conn-2"><div class="step-connector-fill"></div></div>
+          
+          <div class="step-item" id="dot-3">
+            <div class="step-circle">3</div>
+            <span class="step-label">Configure</span>
+          </div>
+        </div>
+
+        <!-- SLIDING VIEWPORT -->
+        <div class="slider-viewport">
+          <div class="steps-container" id="stepsContainer">
+            
+            <!-- ====== STEP 1: CONDITION ====== -->
+            <div class="step-panel" id="step1">
+              <div class="section-header">
+                <div class="accent-bar"></div>
+                <div>
+                  <h2 class="section-title">Condition Check</h2>
+                  <p class="section-subtitle">Provide diagnostics to compute target bounds.</p>
+                </div>
+              </div>
+
+              <div class="cards-gap">
+                <!-- Energy -->
+                <div class="slider-card" style="--fill: var(--green);">
+                  <div class="strip" style="background: var(--green);"></div>
+                  <div class="card-top">
+                    <div class="card-label">
+                      <svg fill="none" stroke="var(--green)" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                      Energy Level
+                    </div>
+                    <div class="val-badge" id="vE">5</div>
+                  </div>
+                  <div class="range-wrap">
+                    <input type="range" id="slEnergy" min="1" max="10" value="5">
+                    <div class="range-labels"><span>Depleted</span><span>Surging</span></div>
+                  </div>
+                </div>
+
+                <!-- Motivation -->
+                <div class="slider-card" style="--fill: var(--blue);">
+                  <div class="strip" style="background: var(--blue);"></div>
+                  <div class="card-top">
+                    <div class="card-label">
+                      <svg fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                      Motivation Vector
+                    </div>
+                    <div class="val-badge" id="vM">5</div>
+                  </div>
+                  <div class="range-wrap">
+                    <input type="range" id="slMotiv" min="1" max="10" value="5">
+                    <div class="range-labels"><span>Unwilling</span><span>Driven</span></div>
+                  </div>
+                </div>
+
+                <!-- Fatigue -->
+                <div class="slider-card" style="--fill: var(--orange);">
+                  <div class="strip" style="background: var(--orange);"></div>
+                  <div class="card-top">
+                    <div class="card-label">
+                      <svg fill="none" stroke="var(--orange)" stroke-width="2.5" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                      Fatigue Debt
+                    </div>
+                    <div class="val-badge" id="vF" style="background: var(--orange);">2</div>
+                  </div>
+                  <div class="range-wrap">
+                    <input type="range" id="slFatigue" min="0" max="10" value="2">
+                    <div class="range-labels"><span>Rested</span><span>Burned Out</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Variance Box -->
+              <div class="variance-box v-opt" id="varBox">
+                <div class="var-top">
+                  <div>
+                    <div class="var-title" id="varIcon">
+                      <svg fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                      Calculated Variance:
+                    </div>
+                    <div class="var-text" id="varText">Optimal Readiness. A 35–45 min session is perfect.</div>
+                  </div>
+                  <div class="var-score" id="varScoreText">85<span style="font-size:16px;opacity:0.5">/100</span></div>
+                </div>
+                <div class="var-bar-bg"><div class="var-bar-fill" id="varFill" style="width: 85%;"></div></div>
+              </div>
+
+              <div class="btn-row">
+                <button class="btn-proc" onclick="goStep(2)">Proceed &rarr;</button>
+              </div>
+            </div>
+
+            <!-- ====== STEP 2: CONTRACT ====== -->
+            <div class="step-panel" id="step2">
+              <div class="section-header">
+                <div class="accent-bar" style="background: var(--navy);"></div>
+                <div>
+                  <h2 class="section-title">Accountability Contract</h2>
+                  <p class="section-subtitle">Enable automated failure deterrents.</p>
+                </div>
+              </div>
+
+              <div class="acc-card">
+                <div class="acc-info">
+                  <div class="acc-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><rect x="9" y="10" width="6" height="6" rx="1"/><path d="M12 10V8a2 2 0 0 0-4 0"/></svg>
+                  </div>
+                  <div class="acc-text">
+                    <h3>Enforce Rules</h3>
+                    <p>System will log distractions and deduct cognitive score instantly.</p>
+                  </div>
+                </div>
+                <div class="toggle" id="accToggle">
+                  <div class="toggle-thumb"></div>
+                </div>
+              </div>
+
+              <div class="chips-container" id="chipsCont">
+                <div class="chip">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                  Violation Logging
+                </div>
+                <div class="chip" style="background: var(--red);">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                  Score Penalty
+                </div>
+                <div class="chip" style="background: var(--orange);">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                  Session Lock
+                </div>
+              </div>
+
+              <div class="btn-row">
+                <button class="btn-back" onclick="goStep(1)">Back</button>
+                <button class="btn-proc" onclick="goStep(3)">Configure &rarr;</button>
+              </div>
+            </div>
+
+            <!-- ====== STEP 3: CONFIGURE ====== -->
+            <div class="step-panel" id="step3">
+              <div class="section-header">
+                <div class="accent-bar" style="background: #7C3AED;"></div>
+                <div>
+                  <h2 class="section-title">Finalize Parameters</h2>
+                  <p class="section-subtitle">Set execution duration and objective.</p>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Target Subject</label>
+                <div class="input-wrapper">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="6" y1="12" x2="2" y2="12"/><line x1="12" y1="6" x2="12" y2="2"/><line x1="12" y1="22" x2="12" y2="18"/></svg>
+                  <input type="text" class="target-input" id="inpSubject" placeholder="e.g. Architecture Documentation" autocomplete="off">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Execution Baseline</label>
+                <div class="pill-group" id="durGroup">
+                  <button class="pill" data-val="15">15m</button>
+                  <button class="pill active" data-val="25">25m</button>
+                  <button class="pill" data-val="35">35m</button>
+                  <button class="pill" data-val="45">45m</button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Rest Interval</label>
+                <div class="pill-group" id="restGroup">
+                  <button class="pill active" data-val="5">5m</button>
+                  <button class="pill" data-val="10">10m</button>
+                  <button class="pill" data-val="15">15m</button>
+                </div>
+              </div>
+
+              <!-- Summary Card (Appears if subject entered) -->
+              <div class="summary-card" id="sumCard">
+                <div class="summary-grid">
+                  <div class="sum-item"><span class="sum-label">Subject</span><span class="sum-val" id="sumSubj">-</span></div>
+                  <div class="sum-item"><span class="sum-label">Readiness</span><span class="sum-val" id="sumScore" style="color:var(--green)">85/100</span></div>
+                  <div class="sum-item"><span class="sum-label">Duration</span><span class="sum-val" id="sumDur">25m execution</span></div>
+                  <div class="sum-item"><span class="sum-label">Protocol</span><span class="sum-val" id="sumRule">Standard</span></div>
+                </div>
+              </div>
+
+              <div class="btn-row" style="margin-top:0">
+                <button class="btn-back" style="height:56px" onclick="goStep(2)">Back</button>
+                <button class="btn-launch" id="btnLaunch" onclick="launchProtocol()">
+                  <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span class="text">Initiate Protocol</span>
+                  <div class="spinner"></div>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // --- STATE ---
+  let currStep = 1;
+  let score = 85; 
+  let isArmed = false;
+  let subject = "";
+  let duration = 25;
+  let rest = 5;
+
+  // --- VARS / CACHE ---
+  const overlay = document.getElementById('modalOverlay');
+  const btnOpen = document.getElementById('openDemoBtn');
+  const btnClose = document.getElementById('closeBtn');
+  const stepsContainer = document.getElementById('stepsContainer');
+
+  // Open/Close logic
+  btnOpen.onclick = () => overlay.classList.add('active');
+  btnClose.onclick = closeIt;
+  overlay.onclick = (e) => { if(e.target === overlay) closeIt(); };
+  document.addEventListener('keydown', (e) => { if(e.key === 'Escape') closeIt(); });
+
+  function closeIt() {
+    overlay.classList.remove('active');
+    // Reset after close animation
+    setTimeout(() => goStep(1), 300);
+  }
+
+  // --- NAVIGATION ---
+  window.goStep = function(step) {
+    currStep = step;
+    stepsContainer.style.transform = `translateX(-${(step-1)*33.333}%)`;
+    
+    // Update stepper UI
+    for(let i=1; i<=3; i++) {
+      const dot = document.getElementById(`dot-${i}`);
+      const line = document.getElementById(`conn-${i}`);
+      
+      dot.classList.remove('active', 'complete');
+      if(line) line.classList.remove('fill-100');
+
+      if(i < step) {
+        dot.classList.add('complete');
+        // change inner HTML to checkmark
+        dot.querySelector('.step-circle').innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+        if(line) line.classList.add('fill-100');
+      } else if (i === step) {
+        dot.classList.add('active');
+        dot.querySelector('.step-circle').innerHTML = i;
+      } else {
+        dot.querySelector('.step-circle').innerHTML = i;
+      }
+    }
+  }
+
+  // --- SLIDER LOGIC ---
+  const slEnergy = document.getElementById('slEnergy');
+  const slMotiv = document.getElementById('slMotiv');
+  const slFatigue = document.getElementById('slFatigue');
+
+  const vE = document.getElementById('vE');
+  const vM = document.getElementById('vM');
+  const vF = document.getElementById('vF');
+
+  function initSlider(el, badge) {
+    el.addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      const min = parseFloat(e.target.min);
+      const max = parseFloat(e.target.max);
+      const p = ((v - min) / (max - min)) * 100;
+      el.style.setProperty('--val', `${p}%`);
+      
+      badge.innerText = v;
+      badge.classList.remove('bounce');
+      void badge.offsetWidth; // trigger reflow
+      badge.classList.add('bounce');
+      
+      calcVariance();
+    });
+    // kickstart
+    el.dispatchEvent(new Event('input'));
+  }
+
+  initSlider(slEnergy, vE);
+  initSlider(slMotiv, vM);
+  initSlider(slFatigue, vF);
+
+  function calcVariance() {
+    let e = parseInt(slEnergy.value);
+    let m = parseInt(slMotiv.value);
+    let f = parseInt(slFatigue.value);
+    
+    // base formula mapping roughly to 0-100
+    // energy + motiv max = 20. 
+    score = Math.round(((e + m) / 20) * 100) - (f * 5);
+    score = Math.max(0, Math.min(100, score));
+
+    const varBox = document.getElementById('varBox');
+    const varScoreText = document.getElementById('varScoreText');
+    const varFill = document.getElementById('varFill');
+    const varText = document.getElementById('varText');
+    const varIcon = document.getElementById('varIcon');
+
+    varScoreText.innerHTML = `${score}<span style="font-size:16px;opacity:0.5">/100</span>`;
+    document.getElementById('sumScore').innerText = `${score}/100`;
+    varFill.style.width = `${score}%`;
+
+    varBox.className = 'variance-box';
+    const checkSVG = `<svg fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const warnSVG = `<svg fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+    const dangerSVG = `<svg fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`;
+
+    if(score >= 70) {
+      varBox.classList.add('v-opt');
+      varIcon.innerHTML = `${checkSVG} Calculated Variance:`;
+      varText.innerText = 'Optimal Readiness. A 35–45 min session is perfect.';
+      document.getElementById('sumScore').style.color = 'var(--green)';
+    } else if(score >= 40) {
+      varBox.classList.add('v-mod');
+      varIcon.innerHTML = `${warnSVG} Calculated Variance:`;
+      varText.innerText = 'Moderate Capacity. Keep session under 25 mins.';
+      document.getElementById('sumScore').style.color = 'var(--orange)';
+    } else {
+      varBox.classList.add('v-low');
+      varIcon.innerHTML = `${dangerSVG} Calculated Variance:`;
+      varText.innerText = 'Low Readiness. Consider rest or a 15 min micro-task.';
+      document.getElementById('sumScore').style.color = 'var(--red)';
+    }
+  }
+
+  // --- TOGGLE ---
+  const toggle = document.getElementById('accToggle');
+  const chipsCont = document.getElementById('chipsCont');
+  toggle.onclick = () => {
+    isArmed = !isArmed;
+    toggle.classList.toggle('active', isArmed);
+    chipsCont.classList.toggle('active', isArmed);
+    document.getElementById('sumRule').innerText = isArmed ? "Armed Lock" : "Standard";
+    if(isArmed) {
+      document.getElementById('sumRule').style.color = '#F59E0B';
+    } else {
+      document.getElementById('sumRule').style.color = '#FFF';
+    }
+  };
+
+  // --- PILLS ---
+  function setupPills(groupId, cb) {
+    const parent = document.getElementById(groupId);
+    const btns = parent.querySelectorAll('.pill');
+    btns.forEach(btn => {
+      btn.onclick = () => {
+        btns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        cb(btn.dataset.val);
+      };
+    });
+  }
+  setupPills('durGroup', val => { duration = val; updateSummary(); });
+  setupPills('restGroup', val => { rest = val; updateSummary(); });
+
+  // --- SUMMARY CARD ---
+  const inpSubject = document.getElementById('inpSubject');
+  const sumCard = document.getElementById('sumCard');
+  inpSubject.addEventListener('input', (e) => {
+    subject = e.target.value;
+    updateSummary();
+  });
+
+  function updateSummary() {
+    if(subject.trim().length > 0) {
+      sumCard.classList.add('show');
+    } else {
+      sumCard.classList.remove('show');
+    }
+    document.getElementById('sumSubj').innerText = subject || '-';
+    document.getElementById('sumDur').innerText = `${duration}m / ${rest}m rest`;
+    
+    // Enable/Disable launch button
+    const btnL = document.getElementById('btnLaunch');
+    if(subject.trim().length > 0) {
+      btnL.style.opacity = '1';
+      btnL.style.pointerEvents = 'auto';
+    } else {
+      btnL.style.opacity = '0.5';
+      btnL.style.pointerEvents = 'none';
+    }
+  }
+  // init empty state
+  updateSummary();
+
+  // --- LAUNCH PROTOCOL ---
+  window.launchProtocol = function() {
+    const btn = document.getElementById('btnLaunch');
+    btn.classList.add('loading');
+    setTimeout(() => {
+      btn.classList.remove('loading');
+      btn.classList.add('success');
+      setTimeout(() => closeIt(), 800);
+      
+      // Cleanup for demo reset
+      setTimeout(() => { btn.classList.remove('success'); }, 1200);
+    }, 1500);
+  }
+
+</script>
+</body>
+</html>
